@@ -1,0 +1,6 @@
+sentence-transformers==2.7.0
+hdbscan==0.8.33
+scikit-learn==1.4.0
+numpy==1.26.4
+requests==2.31.0
+pytest==8.0.0

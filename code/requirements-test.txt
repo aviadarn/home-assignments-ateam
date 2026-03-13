@@ -1,0 +1,5 @@
+# Minimal dependencies for running the two tests.
+# learning_loop.py uses only stdlib (math, random, re, collections, dataclasses, datetime).
+# sentence-transformers / torch / hdbscan are NOT needed here — they belong to
+# embedder.py which is a separate production component.
+pytest==8.0.0
