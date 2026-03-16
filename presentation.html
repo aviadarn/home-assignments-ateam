@@ -1,0 +1,1245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CPG Social Trend Detection — Architecture Presentation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;0,9..144,700;1,9..144,300;1,9..144,600&family=IBM+Plex+Mono:wght@400;500;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --bg:#0a0a0a;--bg2:#111111;--bg3:#181818;--bg4:#1e1e1e;
+  --border:#242424;--border2:#2e2e2e;
+  --amber:#d4850a;--amber-light:#f0a030;--amber-dim:rgba(212,133,10,0.13);--amber-glow:rgba(212,133,10,0.07);
+  --text:#e8e4dc;--text-dim:#7a7570;--text-mid:#a8a29e;
+  --green:#4ade80;--green-dim:rgba(74,222,128,0.12);
+  --red:#f87171;--red-dim:rgba(248,113,113,0.12);
+  --blue:#60a5fa;--blue-dim:rgba(96,165,250,0.12);
+  --pink:#f472b6;--pink-dim:rgba(244,114,182,0.12);
+  --mono:'IBM Plex Mono',monospace;--serif:'Fraunces',serif;--sans:'DM Sans',sans-serif;
+}
+html{font-size:16px;}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);overflow:hidden;height:100vh;width:100vw;}
+
+/* ── Deck & Slides ── */
+#deck{position:relative;width:100vw;height:100vh;overflow:hidden;}
+.slide{
+  position:absolute;inset:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  padding:3.5rem 5.5rem;
+  opacity:0;transform:translateX(60px);
+  transition:opacity 0.42s cubic-bezier(0.4,0,0.2,1),transform 0.42s cubic-bezier(0.4,0,0.2,1);
+  pointer-events:none;overflow:hidden;
+}
+.slide.active{opacity:1;transform:translateX(0);pointer-events:all;}
+.slide.exit-left{opacity:0;transform:translateX(-60px);}
+
+/* ── Scroll mode ── */
+body.scroll-mode{overflow:auto;height:auto;}
+body.scroll-mode #deck{height:auto;overflow:visible;display:flex;flex-direction:column;}
+body.scroll-mode .slide{position:relative;opacity:1;transform:none;height:auto;min-height:100vh;pointer-events:all;border-bottom:1px solid var(--border);}
+
+/* ── Notes mode ── */
+body.notes-open{padding-bottom:148px;}
+body.notes-open #deck{height:calc(100vh - 148px);}
+body.notes-open.scroll-mode{padding-bottom:0;}
+body.notes-open.scroll-mode #deck{height:auto;}
+#notes-panel{
+  position:fixed;bottom:0;left:0;right:0;height:148px;
+  background:#0e0e0e;border-top:2px solid var(--amber);
+  padding:10px 28px 10px 28px;z-index:200;
+  display:none;overflow:hidden;
+}
+#notes-panel.visible{display:block;}
+#notes-panel .notes-label{font-family:var(--mono);font-size:9px;color:var(--amber);letter-spacing:2px;text-transform:uppercase;margin-bottom:6px;}
+#notes-panel .notes-text{font-family:var(--sans);font-size:13px;color:var(--text-mid);line-height:1.55;overflow:hidden;display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;}
+
+/* ── Controls ── */
+#ctrl-notes{
+  position:fixed;top:18px;left:20px;z-index:300;
+  font-family:var(--mono);font-size:10px;color:var(--text-dim);
+  background:var(--bg2);border:1px solid var(--border);
+  padding:5px 10px;border-radius:4px;cursor:pointer;letter-spacing:1px;
+  transition:color 0.2s,border-color 0.2s;
+}
+#ctrl-notes:hover,#ctrl-notes.active{color:var(--amber);border-color:var(--amber);}
+#ctrl-scroll{
+  position:fixed;top:18px;right:20px;z-index:300;
+  font-family:var(--mono);font-size:10px;color:var(--text-dim);
+  background:var(--bg2);border:1px solid var(--border);
+  padding:5px 10px;border-radius:4px;cursor:pointer;letter-spacing:1px;
+  transition:color 0.2s,border-color 0.2s;
+}
+#ctrl-scroll:hover,#ctrl-scroll.active{color:var(--amber);border-color:var(--amber);}
+#slide-counter{
+  position:fixed;top:18px;left:50%;transform:translateX(-50%);z-index:300;
+  font-family:var(--mono);font-size:10px;color:var(--text-dim);letter-spacing:2px;
+}
+#dot-nav{
+  position:fixed;bottom:18px;left:50%;transform:translateX(-50%);z-index:300;
+  display:flex;gap:7px;align-items:center;
+  transition:opacity 0.3s;
+}
+body.notes-open #dot-nav{opacity:0;pointer-events:none;}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--border2);cursor:pointer;transition:background 0.2s,transform 0.2s;}
+.dot.active{background:var(--amber);transform:scale(1.3);}
+
+/* ── Common slide elements ── */
+.slide-tag{font-family:var(--mono);font-size:10px;color:var(--amber);letter-spacing:2.5px;text-transform:uppercase;margin-bottom:14px;}
+.slide h2{font-family:var(--serif);font-size:2rem;font-weight:600;color:var(--text);line-height:1.2;margin-bottom:1.4rem;}
+.slide h3{font-family:var(--serif);font-size:1.2rem;font-weight:600;color:var(--text);margin-bottom:0.6rem;}
+.amber{color:var(--amber);}
+.dim{color:var(--text-dim);}
+.mid{color:var(--text-mid);}
+.green{color:var(--green);}
+.red{color:var(--red);}
+.mono{font-family:var(--mono);}
+
+/* ── Card / Box primitives ── */
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:1.1rem 1.3rem;}
+.card-amber{background:var(--amber-dim);border:1px solid var(--amber);border-radius:8px;padding:1rem 1.2rem;}
+.card-green{background:var(--green-dim);border:1px solid rgba(74,222,128,0.35);border-radius:8px;padding:1rem 1.2rem;}
+.card-red{background:var(--red-dim);border:1px solid rgba(248,113,113,0.35);border-radius:8px;padding:1rem 1.2rem;}
+.card-blue{background:var(--blue-dim);border:1px solid rgba(96,165,250,0.35);border-radius:8px;padding:1rem 1.2rem;}
+.card-pink{background:var(--pink-dim);border:1px solid rgba(244,114,182,0.35);border-radius:8px;padding:1rem 1.2rem;}
+.code-block{
+  background:#0d0d0d;border:1px solid var(--border);border-radius:6px;
+  padding:0.9rem 1rem;font-family:var(--mono);font-size:11px;color:#c9c0b0;
+  line-height:1.65;white-space:pre;overflow:auto;
+}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;width:100%;}
+.three-col{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1.2rem;width:100%;}
+.col{display:flex;flex-direction:column;gap:0.8rem;}
+
+/* ── Stat boxes ── */
+.stat-row{display:flex;gap:1rem;justify-content:center;margin:1rem 0;}
+.stat-box{
+  background:var(--bg2);border:1px solid var(--border);border-radius:8px;
+  padding:0.8rem 1.4rem;text-align:center;min-width:110px;
+}
+.stat-box .val{font-family:var(--mono);font-size:1.3rem;color:var(--amber);font-weight:600;}
+.stat-box .lbl{font-family:var(--mono);font-size:9px;color:var(--text-dim);letter-spacing:1.5px;margin-top:3px;}
+
+/* ── Tables ── */
+.data-table{width:100%;border-collapse:collapse;font-size:12px;}
+.data-table th{font-family:var(--mono);font-size:9px;color:var(--text-dim);letter-spacing:1.5px;text-transform:uppercase;padding:6px 10px;border-bottom:1px solid var(--border);text-align:left;}
+.data-table td{padding:6px 10px;border-bottom:1px solid var(--border);color:var(--text-mid);font-size:11.5px;vertical-align:top;}
+.data-table tr:last-child td{border-bottom:none;}
+.data-table td:first-child{font-family:var(--mono);color:var(--text);}
+
+/* ── Timeline ── */
+.timeline{display:flex;align-items:center;gap:0;width:100%;margin:0.6rem 0;}
+.tl-node{display:flex;flex-direction:column;align-items:center;min-width:80px;}
+.tl-dot{width:11px;height:11px;border-radius:50%;flex-shrink:0;}
+.tl-label{font-family:var(--mono);font-size:9px;text-align:center;margin-top:5px;line-height:1.4;}
+.tl-connector{flex:1;height:2px;margin-top:-5px;}
+
+/* ── Funnel ── */
+.funnel-step{
+  display:flex;align-items:center;gap:10px;
+  background:var(--bg2);border:1px solid var(--border);border-radius:5px;
+  padding:7px 12px;margin-bottom:4px;position:relative;
+  font-family:var(--mono);font-size:11px;
+  transition:background 0.2s;
+}
+.funnel-step .step-num{color:var(--amber);font-size:9px;min-width:14px;}
+.funnel-step .step-name{color:var(--text);font-weight:500;min-width:90px;}
+.funnel-step .step-desc{color:var(--text-dim);font-size:9.5px;flex:1;}
+.funnel-step .step-badge{
+  font-family:var(--mono);font-size:9px;padding:2px 7px;
+  border-radius:10px;background:var(--bg3);border:1px solid var(--border);
+  color:var(--text-mid);white-space:nowrap;
+}
+.funnel-step.highlight-amber{background:var(--amber-dim);border-color:var(--amber);}
+.funnel-step.highlight-green{background:var(--green-dim);border-color:rgba(74,222,128,0.4);}
+
+/* ── Loop cards ── */
+.loop-card{border-radius:8px;padding:1rem;display:flex;flex-direction:column;gap:0.5rem;}
+.loop-card .lc-tag{font-family:var(--mono);font-size:8.5px;letter-spacing:2px;text-transform:uppercase;margin-bottom:2px;}
+.loop-card .lc-title{font-family:var(--serif);font-size:1rem;font-weight:600;}
+.loop-card .lc-sub{font-family:var(--sans);font-size:11px;color:var(--text-mid);}
+.loop-card .lc-row{display:flex;justify-content:space-between;font-family:var(--mono);font-size:9.5px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.05);}
+.loop-card .lc-row:last-child{border-bottom:none;}
+.loop-card .lc-key{color:var(--text-dim);}
+.loop-card .lc-val{color:var(--text);}
+
+/* ── Architecture detail panel ── */
+#detail-panel{
+  position:fixed;top:50%;right:24px;transform:translateY(-50%);
+  width:260px;background:#0e0e0e;border:1px solid var(--amber);border-radius:8px;
+  padding:14px 16px;z-index:400;display:none;
+}
+#detail-panel.visible{display:block;}
+#detail-title{font-family:var(--mono);font-size:10px;color:var(--amber);margin-bottom:6px;letter-spacing:1px;}
+#detail-body{font-family:var(--sans);font-size:12px;color:var(--text-mid);line-height:1.6;}
+#detail-close{
+  position:absolute;top:8px;right:10px;cursor:pointer;
+  font-family:var(--mono);font-size:11px;color:var(--text-dim);
+}
+#detail-close:hover{color:var(--amber);}
+
+/* ── Gradient headline ── */
+.grad-text{
+  background:linear-gradient(135deg,var(--amber-light) 0%,var(--amber) 60%,#a06010 100%);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+}
+
+/* ── Slide-specific overrides ── */
+/* S1 */
+#s1{text-align:center;}
+#s1 h1{font-family:var(--serif);font-size:3rem;font-style:italic;font-weight:600;line-height:1.15;margin-bottom:0.6rem;}
+#s1 .sub{font-family:var(--sans);font-size:1.05rem;color:var(--text-mid);margin-bottom:1.4rem;}
+#s1 .tagline{font-family:var(--mono);font-size:10px;color:var(--text-dim);letter-spacing:2px;margin-top:1.2rem;}
+
+/* S3 pipeline stages */
+.pipe-flow{display:flex;align-items:stretch;gap:0;width:100%;margin:0.8rem 0;}
+.pipe-stage{
+  flex:1;background:var(--bg2);border:1px solid var(--border);
+  padding:0.7rem 0.8rem;font-family:var(--mono);font-size:9.5px;
+  position:relative;
+}
+.pipe-stage:not(:first-child)::before{
+  content:'';position:absolute;left:-1px;top:50%;transform:translateY(-50%);
+  width:0;height:0;border-top:8px solid transparent;border-bottom:8px solid transparent;
+  border-left:8px solid var(--border);z-index:1;
+}
+.pipe-stage .ps-num{color:var(--amber);font-size:8px;letter-spacing:1px;margin-bottom:3px;}
+.pipe-stage .ps-name{color:var(--text);font-size:9px;font-weight:500;margin-bottom:2px;}
+.pipe-stage .ps-desc{color:var(--text-dim);font-size:8px;line-height:1.4;}
+
+/* S10 counter */
+#ctr-after{display:inline-block;font-family:var(--serif);font-size:3.2rem;color:var(--green);font-weight:600;}
+#ctr-before{font-family:var(--serif);font-size:3.2rem;color:var(--text-dim);font-weight:300;}
+
+/* Scrollbar */
+::-webkit-scrollbar{width:4px;height:4px;}
+::-webkit-scrollbar-track{background:var(--bg);}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
+</style>
+</head>
+<body>
+
+<!-- Controls -->
+<button id="ctrl-notes" onclick="toggleNotes()">N · NOTES</button>
+<div id="slide-counter">1 / 12</div>
+<button id="ctrl-scroll" onclick="toggleScroll()">[S] SCROLL</button>
+
+<!-- Dot nav -->
+<div id="dot-nav"></div>
+
+<!-- Notes panel -->
+<div id="notes-panel">
+  <div class="notes-label">Speaker Notes</div>
+  <div class="notes-text" id="notes-text"></div>
+</div>
+
+<!-- Architecture detail panel -->
+<div id="detail-panel">
+  <span id="detail-close" onclick="closeDetail()">✕</span>
+  <div id="detail-title"></div>
+  <div id="detail-body"></div>
+</div>
+
+<div id="deck">
+
+<!-- ═══════════════════════════════════════════════════════════ SLIDE 1 -->
+<section class="slide active" id="s1" data-notes="The core problem is a query-based API constraint — you can only find what you explicitly ask for. That single constraint shaped every architectural decision. I built a three-stage funnel: cheap embeddings filter 90% of posts, a learned classifier narrows it further, and the LLM only sees the top candidates. The whole system gets smarter over time through three feedback loops.">
+  <div class="slide-tag">AI Architecture · CPG Social Trend Detection</div>
+  <h1 class="grad-text">CPG Social Trend<br>Detection System</h1>
+  <p class="sub">An AI architecture that surfaces brand-relevant trends in hours, not days</p>
+  <div class="stat-row">
+    <div class="stat-box"><div class="val">40+</div><div class="lbl">Brands</div></div>
+    <div class="stat-box"><div class="val">&lt;2hr</div><div class="lbl">Latency</div></div>
+    <div class="stat-box"><div class="val">3</div><div class="lbl">Learning Loops</div></div>
+    <div class="stat-box"><div class="val">~$115</div><div class="lbl">/day LLM</div></div>
+  </div>
+  <p class="tagline">Prepared for: A.Team / CPG Client · 2026</p>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════ SLIDE 2 -->
+<section class="slide" id="s2" data-notes="Brand managers rely on weekly manual reports. By the time insights arrive, the trend has peaked and competitors have already acted. The current process achieves roughly 12% CTR on the alerts it surfaces. Our target is 18% CTR within 8 weeks.">
+  <div style="width:100%;max-width:900px;">
+    <div class="slide-tag">The Problem</div>
+    <h2>Signal Arrives After the Moment Has Passed</h2>
+    <div class="two-col" style="gap:1.8rem;">
+      <div>
+        <div style="font-family:var(--mono);font-size:9px;color:var(--red);letter-spacing:2px;margin-bottom:10px;">CURRENT STATE</div>
+        <div class="timeline">
+          <div class="tl-node">
+            <div class="tl-dot" style="background:var(--red);"></div>
+            <div class="tl-label" style="color:var(--red);">Day 0<br><span style="color:var(--text-dim);">Trend emerges</span></div>
+          </div>
+          <div class="tl-connector" style="background:linear-gradient(90deg,var(--red),#7a3030);"></div>
+          <div class="tl-node">
+            <div class="tl-dot" style="background:#c04040;"></div>
+            <div class="tl-label" style="color:var(--text-mid);">Day 2–4<br><span style="color:var(--text-dim);">Manual analysis</span></div>
+          </div>
+          <div class="tl-connector" style="background:#3a2020;"></div>
+          <div class="tl-node">
+            <div class="tl-dot" style="background:#803030;"></div>
+            <div class="tl-label" style="color:var(--text-mid);">Day 5<br><span style="color:var(--text-dim);">Trend peaks</span></div>
+          </div>
+          <div class="tl-connector" style="background:#2a1a1a;"></div>
+          <div class="tl-node">
+            <div class="tl-dot" style="background:#5a2020;"></div>
+            <div class="tl-label" style="color:var(--text-dim);">Day 7<br><span style="color:var(--text-dim);">Report lands</span></div>
+          </div>
+        </div>
+        <div style="margin-top:1rem;">
+          <div style="font-family:var(--mono);font-size:9px;color:var(--green);letter-spacing:2px;margin-bottom:10px;">TARGET STATE</div>
+          <div class="timeline">
+            <div class="tl-node">
+              <div class="tl-dot" style="background:var(--green);"></div>
+              <div class="tl-label" style="color:var(--green);">T+0<br><span style="color:var(--text-dim);">Post created</span></div>
+            </div>
+            <div class="tl-connector" style="background:linear-gradient(90deg,var(--green),#2a6040);"></div>
+            <div class="tl-node">
+              <div class="tl-dot" style="background:#3a8060;"></div>
+              <div class="tl-label" style="color:var(--text-mid);">T+15min<br><span style="color:var(--text-dim);">Ingested</span></div>
+            </div>
+            <div class="tl-connector" style="background:#1a3028;"></div>
+            <div class="tl-node">
+              <div class="tl-dot" style="background:var(--green);box-shadow:0 0 8px rgba(74,222,128,0.5);"></div>
+              <div class="tl-label" style="color:var(--green);">T+2hr<br><span style="color:var(--text-dim);">Alert delivered</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:0.8rem;">
+        <div style="font-family:var(--mono);font-size:9px;color:var(--text-dim);letter-spacing:2px;margin-bottom:4px;">KEY CONSTRAINTS</div>
+        <div class="card" style="border-left:3px solid var(--amber);">
+          <div style="font-family:var(--mono);font-size:11px;color:var(--amber);margin-bottom:3px;">Query-Based API</div>
+          <div style="font-size:12px;color:var(--text-mid);">Must specify search params upfront — can only find what you explicitly ask for</div>
+        </div>
+        <div class="card" style="border-left:3px solid var(--amber);">
+          <div style="font-family:var(--mono);font-size:11px;color:var(--amber);margin-bottom:3px;">40+ Brands</div>
+          <div style="font-size:12px;color:var(--text-mid);">Each with distinct voice, themes, and off-limits guidelines</div>
+        </div>
+        <div class="card" style="border-left:3px solid var(--border2);">
+          <div style="font-family:var(--mono);font-size:11px;color:var(--text);margin-bottom:3px;">40 PDF Guidelines</div>
+          <div style="font-size:12px;color:var(--text-mid);">Unstructured brand documentation — must parse and embed</div>
+        </div>
+        <div class="card" style="border-left:3px solid var(--border2);">
+          <div style="font-family:var(--mono);font-size:11px;color:var(--text);margin-bottom:3px;">Signal Quality</div>
+          <div style="font-size:12px;color:var(--text-mid);">12% CTR baseline → target 18% within 8 weeks</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════ SLIDE 3 -->
+<section class="slide" id="s3" data-notes="Data flows through four stages. Brand guidelines PDFs get parsed by an LLM into structured profiles. Those profiles drive a Query Generator that polls the Social Listening API every 30 minutes per brand. Every returned post goes through a five-step processing funnel. Only the top 20 posts per brand per cycle reach the LLM for final scoring. Every interaction on the dashboard flows back into three learning loops.">
+  <div style="width:100%;max-width:960px;">
+    <div class="slide-tag">System Overview</div>
+    <h2>Key Insight: The Constraint That Shapes Everything</h2>
+    <div class="card-amber" style="margin-bottom:1.2rem;text-align:center;">
+      <span style="font-family:var(--serif);font-size:1.1rem;font-style:italic;color:var(--amber-light);">"Query-based API = you can only find what you ask for.</span>
+      <span style="font-family:var(--serif);font-size:1.1rem;color:var(--text-mid);font-style:italic;"> This single constraint shaped every design decision."</span>
+    </div>
+    <div class="pipe-flow">
+      <div class="pipe-stage">
+        <div class="ps-num">① EXTRACT</div>
+        <div class="ps-name">Brand Profile</div>
+        <div class="ps-desc">PDF → structured JSON + embedding centroid</div>
+      </div>
+      <div class="pipe-stage" style="border-color:var(--amber);background:var(--amber-glow);">
+        <div class="ps-num">② QUERY</div>
+        <div class="ps-name">Query Generator</div>
+        <div class="ps-desc">Profiles → boolean queries, every 30min/brand</div>
+      </div>
+      <div class="pipe-stage">
+        <div class="ps-num">③ FUNNEL</div>
+        <div class="ps-name">5-Step Processing</div>
+        <div class="ps-desc">embed → dedup → velocity → filter → classify</div>
+      </div>
+      <div class="pipe-stage" style="border-color:var(--amber);background:var(--amber-glow);">
+        <div class="ps-num">④ SCORE</div>
+        <div class="ps-name">LLM Scorer</div>
+        <div class="ps-desc">Top 20 posts/brand/cycle → Bedrock Haiku</div>
+      </div>
+      <div class="pipe-stage">
+        <div class="ps-num">⑤ LEARN</div>
+        <div class="ps-name">Dashboard + 3 Loops</div>
+        <div class="ps-desc">Feedback → query expansion, threshold, prompt</div>
+      </div>
+    </div>
+    <div class="code-block" style="font-size:10px;color:var(--text-dim);border-color:var(--border);margin-top:0.6rem;">
+API retrieval → embedding → dedup → velocity → brand similarity filter → classifier → LLM scorer → alert → feedback → learning</div>
+    <div class="three-col" style="margin-top:1rem;">
+      <div class="card" style="padding:0.7rem 1rem;">
+        <div style="font-family:var(--mono);font-size:9px;color:var(--text-dim);letter-spacing:1.5px;margin-bottom:4px;">SCALE</div>
+        <div style="font-size:12px;color:var(--text-mid);">40 brands × 48 cycles/day = <span style="color:var(--text);">1,920 API queries/day</span></div>
+      </div>
+      <div class="card" style="padding:0.7rem 1rem;">
+        <div style="font-family:var(--mono);font-size:9px;color:var(--text-dim);letter-spacing:1.5px;margin-bottom:4px;">LATENCY</div>
+        <div style="font-size:12px;color:var(--text-mid);">Worst-case end-to-end: <span style="color:var(--amber);">&lt;37 minutes</span></div>
+      </div>
+      <div class="card" style="padding:0.7rem 1rem;">
+        <div style="font-family:var(--mono);font-size:9px;color:var(--text-dim);letter-spacing:1.5px;margin-bottom:4px;">FEEDBACK LOOPS</div>
+        <div style="font-size:12px;color:var(--text-mid);">Weekly · Bi-weekly · Monthly — <span style="color:var(--text);">no interference</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════ SLIDE 4 -->
+<section class="slide" id="s4" data-notes="I wanted the diagram to make one thing obvious: the feedback loop closes completely. Every alert that gets dismissed is a training signal. Every content brief created is a strong positive label.">
+  <div style="width:100%;max-width:960px;">
+    <div class="slide-tag">System Architecture</div>
+    <h2>End-to-End Data Flow on AWS</h2>
+    <div style="width:100%;overflow:visible;">
+<svg viewBox="0 0 900 360" width="100%" height="100%" style="display:block;" overflow="visible">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#525252"/>
+    </marker>
+    <marker id="arr-amber" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#d4850a"/>
+    </marker>
+    <symbol id="ic-apigw" viewBox="0 0 40 40">
+      <rect width="40" height="40" rx="7" fill="#E7157B"/>
+      <line x1="8" y1="13" x2="32" y2="13" stroke="white" stroke-width="2" opacity="0.9"/>
+      <line x1="8" y1="20" x2="32" y2="20" stroke="white" stroke-width="2" opacity="0.7"/>
+      <line x1="8" y1="27" x2="22" y2="27" stroke="white" stroke-width="2" opacity="0.5"/>
+      <line x1="8" y1="10" x2="8" y2="30" stroke="white" stroke-width="1.5" opacity="0.4"/>
+      <circle cx="31" cy="28" r="5" fill="white" opacity="0.95"/>
+      <path d="M28.2,28 L30.8,30.5 L34.2,25.5" stroke="#E7157B" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="ic-lambda" viewBox="0 0 40 40">
+      <rect width="40" height="40" rx="7" fill="#FF9900"/>
+      <path d="M8,34 L17,10 L22,24 M22,24 L27,10 L36,34" stroke="white" stroke-width="3.2" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="ic-sagemaker" viewBox="0 0 40 40">
+      <rect width="40" height="40" rx="7" fill="#FF9900"/>
+      <circle cx="20" cy="20" r="4.5" fill="white"/>
+      <circle cx="7" cy="12" r="3" fill="white" opacity="0.9"/>
+      <circle cx="33" cy="12" r="3" fill="white" opacity="0.9"/>
+      <circle cx="7" cy="28" r="3" fill="white" opacity="0.9"/>
+      <circle cx="33" cy="28" r="3" fill="white" opacity="0.9"/>
+      <line x1="10" y1="13.5" x2="16" y2="17.5" stroke="white" stroke-width="1.6" opacity="0.85"/>
+      <line x1="30" y1="13.5" x2="24" y2="17.5" stroke="white" stroke-width="1.6" opacity="0.85"/>
+      <line x1="10" y1="26.5" x2="16" y2="22.5" stroke="white" stroke-width="1.6" opacity="0.85"/>
+      <line x1="30" y1="26.5" x2="24" y2="22.5" stroke="white" stroke-width="1.6" opacity="0.85"/>
+    </symbol>
+    <symbol id="ic-bedrock" viewBox="0 0 40 40">
+      <rect width="40" height="40" rx="7" fill="#FF9900"/>
+      <rect x="6" y="8" width="28" height="7" rx="3" fill="white"/>
+      <rect x="6" y="17" width="28" height="7" rx="3" fill="white" opacity="0.70"/>
+      <rect x="6" y="26" width="28" height="7" rx="3" fill="white" opacity="0.42"/>
+    </symbol>
+    <symbol id="ic-amplify" viewBox="0 0 40 40">
+      <rect width="40" height="40" rx="7" fill="#FF9900"/>
+      <path d="M20,7 L35,36 L5,36 Z" fill="none" stroke="white" stroke-width="3.5" stroke-linejoin="round"/>
+      <line x1="13" y1="27" x2="27" y2="27" stroke="white" stroke-width="3"/>
+    </symbol>
+    <symbol id="ic-s3" viewBox="0 0 40 40">
+      <rect width="40" height="40" rx="7" fill="#3F8624"/>
+      <path d="M10,17 L10,34 Q10,38 20,38 Q30,38 30,34 L30,17" fill="white" opacity="0.88"/>
+      <ellipse cx="20" cy="17" rx="10" ry="3.8" fill="white"/>
+      <ellipse cx="20" cy="17" rx="10" ry="3.8" fill="#2a5c17" opacity="0.4"/>
+    </symbol>
+    <symbol id="ic-opensearch" viewBox="0 0 40 40">
+      <rect width="40" height="40" rx="7" fill="#0053A0"/>
+      <circle cx="17" cy="17" r="8.5" fill="none" stroke="white" stroke-width="3.5"/>
+      <line x1="23.2" y1="23.2" x2="34" y2="34" stroke="white" stroke-width="3.5" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="ic-rds" viewBox="0 0 40 40">
+      <rect width="40" height="40" rx="7" fill="#527FFF"/>
+      <ellipse cx="20" cy="13" rx="11" ry="4" fill="white"/>
+      <rect x="9" y="13" width="22" height="14" fill="white" opacity="0.82"/>
+      <ellipse cx="20" cy="27" rx="11" ry="4" fill="#3a6cee"/>
+      <ellipse cx="20" cy="13" rx="11" ry="4" fill="white"/>
+      <line x1="9" y1="19" x2="31" y2="19" stroke="#3a6cee" stroke-width="1.2" opacity="0.3"/>
+      <line x1="9" y1="23" x2="31" y2="23" stroke="#3a6cee" stroke-width="1.2" opacity="0.3"/>
+    </symbol>
+    <symbol id="ic-stepfn" viewBox="0 0 40 40">
+      <rect width="40" height="40" rx="7" fill="#FF4F8B"/>
+      <rect x="7" y="7" width="11" height="11" rx="2.5" fill="white"/>
+      <rect x="22" y="7" width="11" height="11" rx="2.5" fill="white" opacity="0.6"/>
+      <rect x="7" y="22" width="11" height="11" rx="2.5" fill="white" opacity="0.6"/>
+      <rect x="22" y="22" width="11" height="11" rx="2.5" fill="white"/>
+      <line x1="18" y1="12.5" x2="22" y2="12.5" stroke="white" stroke-width="2"/>
+      <line x1="27.5" y1="18" x2="27.5" y2="22" stroke="white" stroke-width="2"/>
+      <line x1="18" y1="27.5" x2="22" y2="27.5" stroke="white" stroke-width="1.6" stroke-dasharray="2.5,1.5"/>
+      <line x1="12.5" y1="18" x2="12.5" y2="22" stroke="white" stroke-width="1.6" stroke-dasharray="2.5,1.5"/>
+    </symbol>
+    <symbol id="ic-dynamo" viewBox="0 0 40 40">
+      <rect width="40" height="40" rx="7" fill="#527FFF"/>
+      <path d="M20,5 L35,13.5 L35,26.5 L20,35 L5,26.5 L5,13.5 Z" fill="white" opacity="0.88"/>
+      <path d="M20,5 L35,13.5 L20,20 L5,13.5 Z" fill="#3a6cee"/>
+      <path d="M20,35 L5,26.5 L5,13.5 L20,20 Z" fill="white" opacity="0.45"/>
+    </symbol>
+  </defs>
+  <rect x="4" y="42" width="884" height="152" rx="8" fill="none" stroke="#242424" stroke-width="1" stroke-dasharray="6,4"/>
+  <rect x="4" y="234" width="620" height="118" rx="8" fill="none" stroke="#2a2000" stroke-width="1" stroke-dasharray="6,4"/>
+  <text x="14" y="56" font-family="IBM Plex Mono" font-size="7.5" fill="#383838" letter-spacing="1">AWS Cloud · Main Pipeline</text>
+  <text x="14" y="248" font-family="IBM Plex Mono" font-size="7.5" fill="#3a2800" letter-spacing="1">AWS Cloud · Feedback &amp; Learning</text>
+  <g class="arch-node" onclick="showDetail('ingest')" style="cursor:pointer">
+    <use href="#ic-s3" x="193" y="60" width="24" height="24"/>
+    <text x="205" y="92" text-anchor="middle" font-family="IBM Plex Mono" font-size="6.5" fill="#3F8624">S3</text>
+    <line x1="205" y1="84" x2="205" y2="108" stroke="#243824" stroke-width="1" stroke-dasharray="2,2"/>
+  </g>
+  <g class="arch-node" onclick="showDetail('embed')" style="cursor:pointer">
+    <use href="#ic-opensearch" x="326" y="60" width="24" height="24"/>
+    <text x="338" y="92" text-anchor="middle" font-family="IBM Plex Mono" font-size="6.5" fill="#0053A0">OpenSearch</text>
+    <line x1="338" y1="84" x2="338" y2="108" stroke="#1a2a3a" stroke-width="1" stroke-dasharray="2,2"/>
+  </g>
+  <g class="arch-node" onclick="showDetail('llm')" style="cursor:pointer">
+    <use href="#ic-rds" x="459" y="60" width="24" height="24"/>
+    <text x="471" y="92" text-anchor="middle" font-family="IBM Plex Mono" font-size="6.5" fill="#527FFF">RDS</text>
+    <line x1="471" y1="84" x2="471" y2="108" stroke="#1a1a3a" stroke-width="1" stroke-dasharray="2,2"/>
+  </g>
+  <g class="arch-node" onclick="showDetail('alert')" style="cursor:pointer">
+    <use href="#ic-rds" x="592" y="60" width="24" height="24"/>
+    <text x="604" y="92" text-anchor="middle" font-family="IBM Plex Mono" font-size="6.5" fill="#527FFF">RDS</text>
+    <line x1="604" y1="84" x2="604" y2="108" stroke="#1a1a3a" stroke-width="1" stroke-dasharray="2,2"/>
+  </g>
+  <g class="arch-node" onclick="showDetail('api')" style="cursor:pointer">
+    <use href="#ic-apigw" x="45" y="108" width="40" height="40"/>
+    <text x="65" y="160" text-anchor="middle" font-family="IBM Plex Mono" font-size="8" fill="#E7157B">API Gateway</text>
+    <text x="65" y="170" text-anchor="middle" font-family="IBM Plex Mono" font-size="6.8" fill="#525252">query builder</text>
+  </g>
+  <g class="arch-node" onclick="showDetail('ingest')" style="cursor:pointer">
+    <use href="#ic-lambda" x="185" y="108" width="40" height="40"/>
+    <text x="205" y="160" text-anchor="middle" font-family="IBM Plex Mono" font-size="8" fill="#FF9900">Lambda</text>
+    <text x="205" y="170" text-anchor="middle" font-family="IBM Plex Mono" font-size="6.8" fill="#525252">ingestion worker</text>
+  </g>
+  <g class="arch-node" onclick="showDetail('embed')" style="cursor:pointer">
+    <use href="#ic-sagemaker" x="318" y="108" width="40" height="40"/>
+    <text x="338" y="160" text-anchor="middle" font-family="IBM Plex Mono" font-size="8" fill="#FF9900">SageMaker</text>
+    <text x="338" y="170" text-anchor="middle" font-family="IBM Plex Mono" font-size="6.8" fill="#525252">embed + cluster</text>
+  </g>
+  <g class="arch-node" onclick="showDetail('llm')" style="cursor:pointer">
+    <use href="#ic-bedrock" x="451" y="108" width="40" height="40"/>
+    <text x="471" y="160" text-anchor="middle" font-family="IBM Plex Mono" font-size="8" fill="#FF9900">Bedrock</text>
+    <text x="471" y="170" text-anchor="middle" font-family="IBM Plex Mono" font-size="6.8" fill="#525252">LLM scorer</text>
+  </g>
+  <g class="arch-node" onclick="showDetail('alert')" style="cursor:pointer">
+    <use href="#ic-lambda" x="584" y="108" width="40" height="40"/>
+    <text x="604" y="160" text-anchor="middle" font-family="IBM Plex Mono" font-size="8" fill="#FF9900">Lambda</text>
+    <text x="604" y="170" text-anchor="middle" font-family="IBM Plex Mono" font-size="6.8" fill="#525252">alert engine</text>
+  </g>
+  <g class="arch-node" onclick="showDetail('dash')" style="cursor:pointer">
+    <use href="#ic-amplify" x="717" y="108" width="40" height="40"/>
+    <text x="737" y="160" text-anchor="middle" font-family="IBM Plex Mono" font-size="8" fill="#FF9900">Amplify</text>
+    <text x="737" y="170" text-anchor="middle" font-family="IBM Plex Mono" font-size="6.8" fill="#d4850a">brand dashboard</text>
+  </g>
+  <line x1="87" y1="128" x2="183" y2="128" stroke="#525252" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="227" y1="128" x2="316" y2="128" stroke="#525252" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="360" y1="128" x2="449" y2="128" stroke="#525252" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="493" y1="128" x2="582" y2="128" stroke="#525252" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="626" y1="128" x2="715" y2="128" stroke="#525252" stroke-width="1.5" marker-end="url(#arr)"/>
+  <g class="arch-node" onclick="showDetail('feedback')" style="cursor:pointer">
+    <use href="#ic-rds" x="584" y="252" width="40" height="40"/>
+    <text x="604" y="304" text-anchor="middle" font-family="IBM Plex Mono" font-size="8" fill="#d4850a">RDS</text>
+    <text x="604" y="314" text-anchor="middle" font-family="IBM Plex Mono" font-size="6.8" fill="#525252">feedback store</text>
+  </g>
+  <g class="arch-node" onclick="showDetail('loop')" style="cursor:pointer">
+    <use href="#ic-stepfn" x="318" y="252" width="40" height="40"/>
+    <text x="338" y="304" text-anchor="middle" font-family="IBM Plex Mono" font-size="8" fill="#d4850a">Step Functions</text>
+    <text x="338" y="314" text-anchor="middle" font-family="IBM Plex Mono" font-size="6.8" fill="#525252">learning loop</text>
+  </g>
+  <g class="arch-node" onclick="showDetail('terms')" style="cursor:pointer">
+    <use href="#ic-dynamo" x="45" y="252" width="40" height="40"/>
+    <text x="65" y="304" text-anchor="middle" font-family="IBM Plex Mono" font-size="8" fill="#a8a29e">DynamoDB</text>
+    <text x="65" y="314" text-anchor="middle" font-family="IBM Plex Mono" font-size="6.8" fill="#525252">query terms</text>
+  </g>
+  <path d="M737,148 L737,228 L604,228 L604,250" fill="none" stroke="#d4850a" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arr-amber)"/>
+  <line x1="582" y1="272" x2="360" y2="272" stroke="#d4850a" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arr-amber)"/>
+  <line x1="316" y1="272" x2="87" y2="272" stroke="#d4850a" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arr-amber)"/>
+  <path d="M65,250 L65,186 L43,186 L43,148" fill="none" stroke="#d4850a" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arr-amber)"/>
+  <g transform="translate(800,290)">
+    <line x1="0" y1="10" x2="25" y2="10" stroke="#525252" stroke-width="1.5" marker-end="url(#arr)"/>
+    <text x="28" y="13" font-family="IBM Plex Mono" font-size="7.5" fill="#525252">data flow</text>
+    <line x1="0" y1="26" x2="25" y2="26" stroke="#d4850a" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arr-amber)"/>
+    <text x="28" y="29" font-family="IBM Plex Mono" font-size="7.5" fill="#7a7570">feedback loop</text>
+  </g>
+</svg>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════ SLIDE 5 -->
+<section class="slide" id="s5" data-notes="Once posts come in, they go through five steps. Embedding with all-MiniLM-L6-v2 — I chose this because it's 384-dim, fast on CPU, no fine-tuning needed. Near-duplicate detection drops reshares. Velocity scoring flags what's actually accelerating — not just high engagement but fast-rising engagement. Then a cosine similarity filter drops 90% of posts cheaply. Finally a logistic regression classifier on 12 features gives a probability score. Why logistic regression not neural? Because it's interpretable, fast, and updatable weekly from ~200 feedback examples.">
+  <div style="width:100%;max-width:960px;">
+    <div class="slide-tag">Core Technical Approach</div>
+    <h2>5-Stage Filtering Funnel</h2>
+    <div class="two-col" style="gap:1.8rem;align-items:start;">
+      <div style="flex:0 0 58%;">
+        <div class="funnel-step" style="width:100%;">
+          <span class="step-num">①</span>
+          <span class="step-name">EMBED</span>
+          <span class="step-desc">all-MiniLM-L6-v2 · 384-dim · ~2,000 posts/sec CPU</span>
+          <span class="step-badge">all posts</span>
+        </div>
+        <div style="display:flex;justify-content:center;margin:1px 0;"><div style="width:1px;height:6px;background:var(--border2);"></div></div>
+        <div class="funnel-step" style="width:97%;margin-left:1.5%;">
+          <span class="step-num">②</span>
+          <span class="step-name">NEAR-DEDUP</span>
+          <span class="step-desc">cosine sim &gt; 0.97 → drop reshares &amp; paraphrases</span>
+        </div>
+        <div style="display:flex;justify-content:center;margin:1px 0;"><div style="width:1px;height:6px;background:var(--border2);"></div></div>
+        <div class="funnel-step" style="width:94%;margin-left:3%;">
+          <span class="step-num">③</span>
+          <span class="step-name">VELOCITY</span>
+          <span class="step-desc">engagement_growth_rate &gt; 1.5 over 6hr → trending tag</span>
+        </div>
+        <div style="display:flex;justify-content:center;margin:1px 0;"><div style="width:1px;height:6px;background:var(--amber);opacity:0.5;"></div></div>
+        <div class="funnel-step highlight-amber" style="width:56%;margin-left:22%;">
+          <span class="step-num">④</span>
+          <span class="step-name">FILTER</span>
+          <span class="step-desc">cosine &gt; 0.55 → <strong style="color:var(--amber);">~90% dropped</strong></span>
+          <span class="step-badge" style="background:var(--amber-dim);border-color:var(--amber);color:var(--amber);">~50 posts</span>
+        </div>
+        <div style="display:flex;justify-content:center;margin:1px 0;"><div style="width:1px;height:6px;background:var(--border2);"></div></div>
+        <div class="funnel-step" style="width:46%;margin-left:27%;">
+          <span class="step-num">⑤</span>
+          <span class="step-name">CLASSIFY</span>
+          <span class="step-desc">12-feature logistic · threshold 0.65</span>
+          <span class="step-badge">~20 posts</span>
+        </div>
+        <div style="display:flex;justify-content:center;margin:1px 0;"><div style="width:1px;height:6px;background:var(--green);opacity:0.5;"></div></div>
+        <div class="funnel-step highlight-green" style="width:36%;margin-left:32%;">
+          <span class="step-num">⑥</span>
+          <span class="step-name">LLM SCORE</span>
+          <span class="step-desc">Bedrock Haiku · top 20</span>
+          <span class="step-badge" style="background:var(--green-dim);border-color:rgba(74,222,128,0.4);color:var(--green);">≤10 alerts</span>
+        </div>
+      </div>
+      <div style="flex:1;display:flex;flex-direction:column;gap:0.8rem;">
+        <div class="card" style="border-left:3px solid var(--amber);">
+          <div style="font-family:var(--mono);font-size:9px;color:var(--amber);letter-spacing:1.5px;margin-bottom:5px;">WHY LOGISTIC REGRESSION?</div>
+          <div style="font-size:11.5px;color:var(--text-mid);line-height:1.5;">Interpretable, fast, updatable weekly from ~200 examples. Neural model needs thousands per brand. <span style="color:var(--text);">Cold-start problem.</span></div>
+        </div>
+        <div class="card" style="padding:0.8rem;">
+          <div style="font-family:var(--mono);font-size:9px;color:var(--text-dim);letter-spacing:1.5px;margin-bottom:6px;">12 CLASSIFIER FEATURES</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 8px;">
+            <div style="font-family:var(--mono);font-size:9px;color:var(--text-mid);padding:2px 0;border-bottom:1px solid var(--border);">cosine_sim_to_centroid</div>
+            <div style="font-family:var(--mono);font-size:9px;color:var(--text-mid);padding:2px 0;border-bottom:1px solid var(--border);">velocity_score</div>
+            <div style="font-family:var(--mono);font-size:9px;color:var(--text-mid);padding:2px 0;border-bottom:1px solid var(--border);">log(engagement+1)</div>
+            <div style="font-family:var(--mono);font-size:9px;color:var(--text-mid);padding:2px 0;border-bottom:1px solid var(--border);">platform_match_score</div>
+            <div style="font-family:var(--mono);font-size:9px;color:var(--text-mid);padding:2px 0;border-bottom:1px solid var(--border);">off_limits_keyword_hit</div>
+            <div style="font-family:var(--mono);font-size:9px;color:var(--text-mid);padding:2px 0;border-bottom:1px solid var(--border);">author_follower_log</div>
+            <div style="font-family:var(--mono);font-size:9px;color:var(--text-mid);padding:2px 0;border-bottom:1px solid var(--border);">post_age_hours</div>
+            <div style="font-family:var(--mono);font-size:9px;color:var(--text-mid);padding:2px 0;border-bottom:1px solid var(--border);">brand_competitor_mention</div>
+            <div style="font-family:var(--mono);font-size:9px;color:var(--text-mid);padding:2px 0;border-bottom:1px solid var(--border);">has_hashtag</div>
+            <div style="font-family:var(--mono);font-size:9px;color:var(--text-mid);padding:2px 0;border-bottom:1px solid var(--border);">subreddit_relevance</div>
+            <div style="font-family:var(--mono);font-size:9px;color:var(--text-mid);padding:2px 0;">is_news_source</div>
+            <div style="font-family:var(--mono);font-size:9px;color:var(--text-mid);padding:2px 0;">weekend_flag</div>
+          </div>
+        </div>
+        <div class="card" style="border-left:3px solid var(--border2);">
+          <div style="font-family:var(--mono);font-size:9px;color:var(--text-dim);letter-spacing:1.5px;margin-bottom:4px;">WHY THREE STAGES?</div>
+          <div style="font-size:11.5px;color:var(--text-mid);line-height:1.5;">99% of posts irrelevant. LLM on all posts = cost-prohibitive. Cheap stages over-inclusive; LLM is precision gate.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════ SLIDE 6 -->
+<section class="slide" id="s6" data-notes="Only the top 20 posts per brand per cycle reach the LLM. It does two things: final relevance gate catching nuanced off-limits violations, and explanation generation — the 'why this is relevant to your brand' text. I estimated 38,400 LLM calls/day across 40 brands, around $115/day.">
+  <div style="width:100%;max-width:960px;">
+    <div class="slide-tag">LLM · Alert Engine</div>
+    <h2>Final Gate &amp; Alert Generation</h2>
+    <div class="two-col" style="gap:1.8rem;align-items:start;">
+      <div class="col">
+        <div class="card-amber" style="font-family:var(--mono);font-size:10px;color:var(--amber);text-align:center;padding:0.6rem;">
+          Only top 20 posts / brand / cycle reach the LLM
+        </div>
+        <div class="code-block" style="font-size:10.5px;">Brand: {brand_name}
+Brand themes: {themes}
+Off-limits: {off_limits}
+
+Trend cluster (top 3 posts):
+{post_texts}
+
+→ {"relevance": float,
+   "off_limits": bool,
+   "why_relevant": str}</div>
+        <div class="card" style="padding:0.9rem;">
+          <div style="font-family:var(--mono);font-size:9px;color:var(--text-dim);letter-spacing:1.5px;margin-bottom:8px;">COST CALCULATION</div>
+          <div style="font-family:var(--mono);font-size:10.5px;color:var(--text-mid);line-height:2;">
+            40 brands × 20 posts × 48 cycles/day<br>
+            = <span style="color:var(--text);">38,400 calls/day</span><br>
+            ~$0.003/call → <span style="color:var(--amber);font-weight:600;">~$115/day</span><br>
+            <span style="color:var(--text-dim);font-size:9.5px;">At 100 brands → ~$290/day (still viable)</span>
+          </div>
+        </div>
+      </div>
+      <div class="col">
+        <div class="card" style="padding:0.9rem;">
+          <div style="font-family:var(--mono);font-size:9px;color:var(--text-dim);letter-spacing:1.5px;margin-bottom:7px;">ALERT ASSEMBLY — COMPOSITE SCORE</div>
+          <div style="font-family:var(--mono);font-size:9px;color:var(--text-dim);margin-bottom:4px;">HDBSCAN clustering on post embeddings (min_cluster_size=3)</div>
+          <div class="code-block" style="font-size:10px;margin-top:6px;">composite =
+  0.35 × relevance_score
++ 0.35 × velocity_score
++ 0.20 × log(cluster_engagement)
+         / log(max_engagement)
++ 0.10 × novelty_score</div>
+        </div>
+        <div class="card" style="padding:0.9rem;">
+          <div style="font-family:var(--mono);font-size:9px;color:var(--text-dim);letter-spacing:1.5px;margin-bottom:7px;">PUBLISHING RULES</div>
+          <div style="font-size:11.5px;line-height:1.8;color:var(--text-mid);">
+            <span style="color:var(--green);">✓</span> composite &gt; 0.60 → published<br>
+            <span style="color:var(--red);">✗</span> off_limits=true → suppressed<br>
+            <span style="color:var(--amber);">↑</span> Max 10 alerts/brand/day<br>
+            <span style="color:var(--blue);">⚡</span> growth_rate &gt; 3.0 → immediate push, skip cap
+          </div>
+        </div>
+        <div class="card" style="padding:0.9rem;">
+          <div style="font-family:var(--mono);font-size:9px;color:var(--text-dim);letter-spacing:1.5px;margin-bottom:6px;">QUALITY CONTROLS</div>
+          <div style="font-size:11.5px;color:var(--text-mid);line-height:1.6;">
+            Min engagement &gt; 5 likes+reposts · Bot detection (follower/engagement ratio) · Near-dedup at 0.97
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════ SLIDE 7 -->
+<section class="slide" id="s7" data-notes="I designed three separate feedback loops, each targeting a different layer of the system. Query expansion improves what the system looks for. Threshold calibration improves how aggressively it filters. Prompt optimization improves the reasoning quality of the final gate.">
+  <div style="width:100%;max-width:960px;">
+    <div class="slide-tag">Learning Loops &amp; System Improvement · 30% of Evaluation Weight</div>
+    <h2>The System Gets Smarter Over Time</h2>
+    <div class="card" style="border-left:3px solid var(--amber);margin-bottom:1rem;padding:0.7rem 1.1rem;">
+      <span style="font-family:var(--serif);font-style:italic;font-size:0.95rem;color:var(--text-mid);">"The system at launch is a well-engineered heuristic. What makes it defensible long-term is that it improves without manual intervention."</span>
+    </div>
+    <div class="three-col">
+      <div class="loop-card" style="background:var(--amber-dim);border:1px solid var(--amber);">
+        <div class="lc-tag" style="color:var(--amber);">Loop 1 · Weekly</div>
+        <div class="lc-title">Query Expansion</div>
+        <div class="lc-sub">"What to search for"</div>
+        <div class="lc-row"><span class="lc-key">Target</span><span class="lc-val">query_terms weights</span></div>
+        <div class="lc-row"><span class="lc-key">Method</span><span class="lc-val">n-gram scoring</span></div>
+        <div class="lc-row"><span class="lc-key">Cadence</span><span class="lc-val">Mon 02:00 UTC</span></div>
+        <div class="lc-row"><span class="lc-key">Metric</span><span class="lc-val" style="color:var(--green);">CTR 12% → 18%</span></div>
+        <div style="margin-top:6px;font-family:var(--mono);font-size:9px;color:var(--amber);background:rgba(0,0,0,0.2);padding:5px 7px;border-radius:4px;">
+          score = click_rate × action_rate × 10 + log(freq+1)
+        </div>
+      </div>
+      <div class="loop-card" style="background:var(--blue-dim);border:1px solid rgba(96,165,250,0.4);">
+        <div class="lc-tag" style="color:var(--blue);">Loop 2 · Bi-weekly</div>
+        <div class="lc-title">Threshold Calibration</div>
+        <div class="lc-sub">"How aggressively to filter"</div>
+        <div class="lc-row"><span class="lc-key">Target</span><span class="lc-val">per-brand threshold</span></div>
+        <div class="lc-row"><span class="lc-key">Default</span><span class="lc-val">0.65 · range [0.45–0.85]</span></div>
+        <div class="lc-row"><span class="lc-key">Method</span><span class="lc-val">F-0.5 maximization</span></div>
+        <div class="lc-row"><span class="lc-key">Metric</span><span class="lc-val" style="color:var(--green);">P@10: 2.5 → 4/10</span></div>
+        <div class="lc-row"><span class="lc-key">Guardrail</span><span class="lc-val">±0.05 max/cycle</span></div>
+      </div>
+      <div class="loop-card" style="background:var(--pink-dim);border:1px solid rgba(244,114,182,0.4);">
+        <div class="lc-tag" style="color:var(--pink);">Loop 3 · Monthly</div>
+        <div class="lc-title">Prompt Optimization</div>
+        <div class="lc-sub">"How to reason about guidelines"</div>
+        <div class="lc-row"><span class="lc-key">Target</span><span class="lc-val">LLM prompt template</span></div>
+        <div class="lc-row"><span class="lc-key">Method</span><span class="lc-val">Failure → A/B → rollout</span></div>
+        <div class="lc-row"><span class="lc-key">A/B window</span><span class="lc-val">20% traffic · 1 week</span></div>
+        <div class="lc-row"><span class="lc-key">Metric</span><span class="lc-val" style="color:var(--green);">Suppression 75% → 90%</span></div>
+        <div style="margin-top:6px;font-size:10.5px;color:var(--text-dim);font-style:italic;">"Prompt changes affect all 40 brands simultaneously"</div>
+      </div>
+    </div>
+    <div style="text-align:center;margin-top:0.9rem;font-family:var(--mono);font-size:10px;color:var(--text-dim);">
+      They operate at different timescales — weekly, bi-weekly, monthly — so they don't interfere with each other.
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════ SLIDE 8 -->
+<section class="slide" id="s8" data-notes="The query expansion loop answers: what vocabulary should we be searching for? The multiplication formula means it requires BOTH high click rate AND high action rate. A term that gets clicked but never actioned won't score high. For Zephyr, 'afternoon slump' appeared in 4 clicked posts with click_rate 0.83 and action_rate 0.60 — score 6.59, weight 0.95.">
+  <div style="width:100%;max-width:960px;">
+    <div class="slide-tag">Loop 1 · Query Expansion · Weekly</div>
+    <h2>What Vocabulary Should We Search For?</h2>
+    <div style="display:grid;grid-template-columns:1fr 1fr;grid-template-rows:auto auto;gap:1rem;width:100%;">
+      <!-- A: Source Data -->
+      <div>
+        <div style="font-family:var(--mono);font-size:9px;color:var(--text-dim);letter-spacing:2px;margin-bottom:5px;">A — SOURCE DATA</div>
+        <div class="code-block" style="font-size:9px;">query_log(query_log_id, brand_id, query_string,
+          terms_used TEXT[], post_ids TEXT[],
+          surfaced_ids TEXT[], issued_at TIMESTAMPTZ)
+
+alert_feedback(feedback_id, alert_id, brand_id,
+               post_id, action, dwell_time_ms, created_at)
+-- action: click | content_brief | share | dismiss
+-- ~13,440 query_log/week · ~200 feedback/week</div>
+      </div>
+      <!-- B: Learning Target -->
+      <div>
+        <div style="font-family:var(--mono);font-size:9px;color:var(--text-dim);letter-spacing:2px;margin-bottom:5px;">B — LEARNING TARGET (Zephyr Energy)</div>
+        <div class="code-block" style="font-size:9px;">CORE  (unchanged):
+  "energy drink"  1.000
+  "focus"         1.000
+  "productivity"  1.000
+
+EXPANSION (learned):
+  "afternoon slump"  0.820  ← new
+  "deep work"        0.710  ← new
+  "L-theanine"       0.650  ← new
+  "nootropics"       0.410
+
+→ ("energy drink" OR focus OR productivity
+   OR "deep work" OR "afternoon slump")
+AND NOT ("extreme sports" OR "weight loss")</div>
+      </div>
+      <!-- C: Formula -->
+      <div>
+        <div style="font-family:var(--mono);font-size:9px;color:var(--text-dim);letter-spacing:2px;margin-bottom:5px;">C — SCORING FORMULA</div>
+        <div class="card-amber" style="font-family:var(--mono);font-size:11px;text-align:center;margin-bottom:8px;">
+          score = click_rate × action_rate × 10 + log(freq + 1)
+        </div>
+        <div style="font-size:11px;color:var(--text-dim);line-height:1.7;font-family:var(--mono);">
+          <span style="color:var(--text-mid);">click_rate</span> = clicked / surfaced<br>
+          <span style="color:var(--text-mid);">action_rate</span> = actioned / clicked<br>
+          Promote if: score ≥ 0.5 AND freq ≥ 3<br>
+          Decay: new = 0.9 × old + 0.1 × current<br>
+          Prune: weight &lt; 0.3 for 3+ weeks
+        </div>
+      </div>
+      <!-- D: Evaluation -->
+      <div>
+        <div style="font-family:var(--mono);font-size:9px;color:var(--text-dim);letter-spacing:2px;margin-bottom:5px;">D — EVALUATION</div>
+        <div class="card" style="padding:0.8rem;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+            <span style="font-family:var(--mono);font-size:9px;color:var(--text-dim);">Primary Metric</span>
+            <span style="font-family:var(--mono);font-size:11px;color:var(--text);">CTR = actions / delivered</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;margin:8px 0;">
+            <span style="font-family:var(--mono);font-size:1.1rem;color:var(--text-dim);">12%</span>
+            <span style="color:var(--amber);">→</span>
+            <span style="font-family:var(--mono);font-size:1.1rem;color:var(--amber);font-weight:600;">18%</span>
+            <span style="font-family:var(--mono);font-size:9px;color:var(--text-dim);">target in 8 weeks</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;margin:6px 0;">
+            <span style="font-family:var(--mono);font-size:1rem;color:var(--text-dim);">68.4%</span>
+            <span style="color:var(--green);">→</span>
+            <span style="font-family:var(--mono);font-size:1rem;color:var(--green);font-weight:600;">89.5%</span>
+            <span style="font-family:var(--mono);font-size:9px;color:var(--text-dim);">code demo (+31% rel.)</span>
+          </div>
+          <div style="font-size:10.5px;color:var(--text-dim);margin-top:6px;padding-top:6px;border-top:1px solid var(--border);">
+            Guardrail: CTR &lt; 8% any brand → reset to guidelines baseline + human review
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════ SLIDE 9 -->
+<section class="slide" id="s9" data-notes="The second loop calibrates the classifier threshold per brand. Zephyr's team might prefer fewer higher-quality alerts — that's a high-precision preference. Brighten Home might want higher recall. F-0.5 weights precision double over recall because brand manager attention is a scarce resource. The third loop is the riskiest because a bad prompt change degrades all 40 brands simultaneously — which is why it's monthly with a mandatory A/B test.">
+  <div style="width:100%;max-width:960px;">
+    <div class="slide-tag">Loops 2 &amp; 3 · Bi-weekly &amp; Monthly</div>
+    <h2>Calibrating Filters &amp; Improving Reasoning</h2>
+    <div class="two-col" style="gap:1.8rem;align-items:start;">
+      <!-- Loop 2 -->
+      <div class="col">
+        <div style="font-family:var(--mono);font-size:9px;color:var(--blue);letter-spacing:2px;margin-bottom:6px;">LOOP 2 · THRESHOLD CALIBRATION</div>
+        <div style="font-size:12px;color:var(--text-mid);margin-bottom:10px;font-style:italic;">"How aggressively to filter"</div>
+        <div class="card" style="border-left:3px solid var(--blue);margin-bottom:0.7rem;">
+          <div style="font-family:var(--mono);font-size:9px;color:var(--text-dim);margin-bottom:5px;">Target: per-brand classifier_threshold (default 0.65, range [0.45, 0.85])</div>
+          <div style="font-size:11px;line-height:2;color:var(--text-mid);">
+            <span style="color:var(--blue);">1.</span> Collect (score, label) pairs — clicked=1, dismissed=0<br>
+            <span style="color:var(--blue);">2.</span> Sweep thresholds 0.40→0.90 in 0.05 steps<br>
+            <span style="color:var(--blue);">3.</span> Maximize F-0.5 score<br>
+            <span style="color:var(--blue);">4.</span> Dampen: new = old + clip(optimal−old, −0.05, +0.05)
+          </div>
+        </div>
+        <div class="card" style="background:var(--blue-dim);border-color:rgba(96,165,250,0.3);">
+          <div style="font-family:var(--mono);font-size:9px;color:var(--blue);margin-bottom:5px;">WHY F-0.5?</div>
+          <div style="font-size:11.5px;color:var(--text-mid);font-style:italic;line-height:1.55;">"Brand manager attention is scarce. An irrelevant alert trains them to ignore the dashboard. A missed trend is recoverable — they'll catch it next week. So I penalize false positives 2× more than false negatives."</div>
+        </div>
+        <div class="card" style="margin-top:0.6rem;padding:0.7rem 1rem;">
+          <div style="display:flex;justify-content:space-between;">
+            <span style="font-family:var(--mono);font-size:10px;color:var(--text-dim);">Precision@10 baseline</span>
+            <span style="font-family:var(--mono);font-size:10px;color:var(--text);">2.5 / 10</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-top:4px;">
+            <span style="font-family:var(--mono);font-size:10px;color:var(--text-dim);">Target (12 weeks)</span>
+            <span style="font-family:var(--mono);font-size:10px;color:var(--green);">4 / 10</span>
+          </div>
+        </div>
+      </div>
+      <!-- Loop 3 -->
+      <div class="col">
+        <div style="font-family:var(--mono);font-size:9px;color:var(--pink);letter-spacing:2px;margin-bottom:6px;">LOOP 3 · PROMPT OPTIMIZATION</div>
+        <div style="font-size:12px;color:var(--text-mid);margin-bottom:10px;font-style:italic;">"How to reason about guidelines"</div>
+        <div class="card" style="border-left:3px solid var(--pink);margin-bottom:0.7rem;">
+          <div style="font-family:var(--mono);font-size:9px;color:var(--text-dim);margin-bottom:5px;">Target: s3://prompt-store/{"{"}brand_id{"}"}/relevance_prompt_v{"{"}N{"}"}.txt</div>
+          <div style="font-size:11px;line-height:2;color:var(--text-mid);">
+            <span style="color:var(--pink);">1.</span> Collect failure cases (wrong suppression / dismiss &lt;2s)<br>
+            <span style="color:var(--pink);">2.</span> LLM-assisted pattern extraction → 2-3 error patterns<br>
+            <span style="color:var(--pink);">3.</span> Construct candidate prompt (new version)<br>
+            <span style="color:var(--pink);">4.</span> A/B test: 20% traffic for 1 week<br>
+            <span style="color:var(--pink);">5.</span> Promote if CTR +5% AND no suppression rate increase
+          </div>
+        </div>
+        <div class="card" style="background:var(--pink-dim);border-color:rgba(244,114,182,0.3);">
+          <div style="font-family:var(--mono);font-size:9px;color:var(--pink);margin-bottom:5px;">WHY MONTHLY?</div>
+          <div style="font-size:11.5px;color:var(--text-mid);font-style:italic;line-height:1.55;">"Prompt changes affect all 40 brands simultaneously. Monthly cadence with mandatory A/B window gives safety margin. The other loops change a single number per brand."</div>
+        </div>
+        <div class="card" style="margin-top:0.6rem;padding:0.7rem 1rem;">
+          <div style="display:flex;justify-content:space-between;">
+            <span style="font-family:var(--mono);font-size:10px;color:var(--text-dim);">Suppression precision</span>
+            <span style="font-family:var(--mono);font-size:10px;color:var(--text);">75%</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-top:4px;">
+            <span style="font-family:var(--mono);font-size:10px;color:var(--text-dim);">Target (6 months)</span>
+            <span style="font-family:var(--mono);font-size:10px;color:var(--green);">90%</span>
+          </div>
+          <div style="font-family:var(--mono);font-size:9px;color:var(--text-dim);margin-top:6px;">measured by sampling 50 suppressed alerts/month</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════ SLIDE 10 -->
+<section class="slide" id="s10" data-notes="The simulate_updated_ctr function replays training data through updated term weights. Scoring: sum weights of all terms that appear in post text, cap at 1.0. Posts containing the learned vocabulary score strictly higher — that's the overfitting confirmation. CTR: 68.4% → 89.5%.">
+  <div style="width:100%;max-width:960px;">
+    <div class="slide-tag">Code Sample · Overfitting Sanity Check</div>
+    <h2>Proving the Learning Mechanism Works</h2>
+    <div class="two-col" style="gap:1.8rem;align-items:start;">
+      <div>
+        <div style="font-family:var(--mono);font-size:9px;color:var(--text-dim);letter-spacing:2px;margin-bottom:5px;">ANNOTATED IMPLEMENTATION</div>
+        <div class="code-block" style="font-size:9.5px;">def run_query_expansion_loop(
+        posts, alerts, feedbacks, current_terms):
+  # Step 1: collect positively-engaged posts
+  brand_post_actions = [
+    (post, fb.action) for fb in feedbacks
+    for post in posts if post.id == fb.post_id]
+
+  # Step 2: extract 1-3 word n-grams
+  for post, action in brand_post_actions:
+    grams = set(_extract_ngrams(post.text))
+    for gram in grams:
+      if gram in existing_core_grams:
+        continue  # skip core terms
+      ngram_surfaced[gram] += 1
+
+      # Step 3: score clicks &amp; high-value actions
+      if action in POSITIVE_ACTIONS:
+        ngram_clicked[gram] += 1
+      if action in {"content_brief", "share"}:
+        ngram_actioned[gram] += 1
+
+  # Step 4: score = click_rate × action_rate × 10
+  #                 + log(freq + 1)
+  score = (click_rate * action_rate * 10
+           + math.log(freq + 1))
+
+  # Step 5: decay existing, prune, add top-5
+  decayed = qt.weight * 0.9
+  if decayed >= 0.25: keep()  # prune threshold</div>
+      </div>
+      <div class="col">
+        <div style="font-family:var(--mono);font-size:9px;color:var(--text-dim);letter-spacing:2px;margin-bottom:10px;">SIMULATION RESULTS</div>
+        <div class="card" style="padding:1.2rem;text-align:center;margin-bottom:0.8rem;">
+          <div style="display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:8px;">
+            <div>
+              <div style="font-family:var(--mono);font-size:9px;color:var(--text-dim);margin-bottom:3px;">BEFORE</div>
+              <div id="ctr-before" style="font-family:'Fraunces',serif;font-size:2.8rem;color:var(--text-dim);font-weight:300;">68.4%</div>
+            </div>
+            <div style="color:var(--amber);font-size:1.5rem;">→</div>
+            <div>
+              <div style="font-family:var(--mono);font-size:9px;color:var(--text-dim);margin-bottom:3px;">AFTER</div>
+              <div id="ctr-after" style="font-family:'Fraunces',serif;font-size:2.8rem;color:var(--green);font-weight:600;">68.4%</div>
+            </div>
+          </div>
+          <div style="font-family:var(--mono);font-size:11px;color:var(--green);background:var(--green-dim);border-radius:4px;padding:4px 10px;display:inline-block;">+21.1pp / +31% relative</div>
+        </div>
+        <div class="three-col" style="gap:0.6rem;">
+          <div class="card" style="text-align:center;padding:0.7rem 0.5rem;">
+            <div style="font-family:var(--mono);font-size:1.2rem;color:var(--amber);">15</div>
+            <div style="font-family:var(--mono);font-size:8px;color:var(--text-dim);">New Terms</div>
+          </div>
+          <div class="card" style="text-align:center;padding:0.7rem 0.5rem;">
+            <div style="font-family:var(--mono);font-size:1.2rem;color:var(--amber);">33%</div>
+            <div style="font-family:var(--mono);font-size:8px;color:var(--text-dim);">Surfaced</div>
+          </div>
+          <div class="card" style="text-align:center;padding:0.7rem 0.5rem;">
+            <div style="font-family:var(--mono);font-size:1.2rem;color:var(--amber);">3</div>
+            <div style="font-family:var(--mono);font-size:8px;color:var(--text-dim);">Brands</div>
+          </div>
+        </div>
+        <div class="card" style="margin-top:0.6rem;border-left:3px solid var(--amber);">
+          <div style="font-family:var(--mono);font-size:9px;color:var(--amber);margin-bottom:5px;">WHY ADDITIVE SCORING?</div>
+          <div style="font-size:11.5px;color:var(--text-mid);line-height:1.55;">Adding a new expansion term can only INCREASE a post's score. Additive scoring with cap at 1.0 means the filter gets MORE specific over time.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════ SLIDE 11 -->
+<section class="slide" id="s11" data-notes="For a 2-3 engineer team, pgvector keeps the stack unified. One database for all data, SQL joins work natively, ANN performance with HNSW index is comparable to Pinecone at our volume. If we scale to 100+ brands and billions of embeddings, Pinecone becomes the right call — the migration is mechanical.">
+  <div style="width:100%;max-width:960px;">
+    <div class="slide-tag">Section 7 · Data Model &amp; Storage</div>
+    <h2>Intentionally Simple Storage Stack</h2>
+    <div class="two-col" style="gap:1.8rem;align-items:start;">
+      <div>
+        <div style="font-family:var(--mono);font-size:9px;color:var(--text-dim);letter-spacing:2px;margin-bottom:6px;">ENTITY RELATIONSHIPS</div>
+        <div class="code-block" style="font-size:10px;">Brand ──1:N──► BrandProfile (versioned)
+Brand ──1:N──► QueryTerms (weighted, versioned)
+Brand ──1:N──► QueryLog
+QueryLog ──► Post (many, via returned_ids)
+Post ──1:1──► PostEmbedding (pgvector)
+Post ──N:1──► TrendCluster (HDBSCAN)
+TrendCluster ──1:N──► Alert
+Alert ──1:N──► AlertFeedback
+Alert ──1:1──► PromptLog</div>
+        <div class="card" style="margin-top:0.9rem;border-left:3px solid var(--border2);">
+          <div style="font-family:var(--mono);font-size:9px;color:var(--text-dim);margin-bottom:5px;">NOTE</div>
+          <div style="font-size:11.5px;color:var(--text-mid);">Feature store not needed at launch — only 12 features computed on-the-fly from Postgres.</div>
+        </div>
+      </div>
+      <div>
+        <div style="font-family:var(--mono);font-size:9px;color:var(--text-dim);letter-spacing:2px;margin-bottom:6px;">STORAGE CHOICES</div>
+        <table class="data-table">
+          <thead><tr><th>Store</th><th>Technology</th><th>Why</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>Raw posts</td>
+              <td style="color:var(--text-mid);">S3 JSONL</td>
+              <td style="color:var(--text-dim);">Schema-flexible, append-only, cheap, enables reprocessing</td>
+            </tr>
+            <tr>
+              <td>Embeddings</td>
+              <td style="color:var(--text-mid);">pgvector</td>
+              <td style="color:var(--text-dim);">ANN search with SQL joins; avoids separate vector DB</td>
+            </tr>
+            <tr>
+              <td>Alerts / feedback</td>
+              <td style="color:var(--text-mid);">Postgres</td>
+              <td style="color:var(--text-dim);">ACID, complex joins across alerts↔feedback↔query_log</td>
+            </tr>
+            <tr>
+              <td>Model artifacts</td>
+              <td style="color:var(--text-mid);">S3 versioned</td>
+              <td style="color:var(--text-dim);">.pkl classifiers, .txt prompts; active pointer in Postgres</td>
+            </tr>
+            <tr>
+              <td>Velocity cache</td>
+              <td style="color:var(--text-mid);">Redis</td>
+              <td style="color:var(--text-dim);">Low-latency, recomputable, TTL-based expiry</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════ SLIDE 12 -->
+<section class="slide" id="s12" data-notes="The biggest risk is the query-based blind spot. A truly novel trend using vocabulary not in our term lists will be invisible until exploration queries catch it. The mitigation is the exploration layer plus a manual 'add trending topic' button on the dashboard. How does it scale to 400 brands? Linearly for most components. LLM cost goes from $115 to ~$1,150/day — still within budget. The Postgres schema is brand-partitioned so queries stay fast. The one bottleneck is API rate limits.">
+  <div style="width:100%;max-width:980px;">
+    <div class="slide-tag">Section 8 · Tradeoffs &amp; Risks</div>
+    <h2>Top 5 Tradeoffs &amp; Key Numbers</h2>
+    <div class="two-col" style="gap:1.6rem;align-items:start;">
+      <div>
+        <div style="font-family:var(--mono);font-size:9px;color:var(--text-dim);letter-spacing:2px;margin-bottom:6px;">TRADEOFFS</div>
+        <table class="data-table" style="font-size:10.5px;">
+          <thead><tr><th>#</th><th>Tradeoff</th><th>Gain</th><th>Risk / Mitigation</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>1</td>
+              <td style="color:var(--text-mid);">Query-based API blind spots</td>
+              <td style="color:var(--text-mid);">Cost, simplicity</td>
+              <td style="color:var(--text-dim);">Weekly exploration queries</td>
+            </tr>
+            <tr>
+              <td>2</td>
+              <td style="color:var(--text-mid);">Cosine 0.55 — recall tradeoff</td>
+              <td style="color:var(--text-mid);">Cost, latency</td>
+              <td style="color:var(--text-dim);">Permissive; monitor via survey</td>
+            </tr>
+            <tr>
+              <td>3</td>
+              <td style="color:var(--text-mid);">Small feedback → slow loops</td>
+              <td style="color:var(--text-mid);">Fast to market</td>
+              <td style="color:var(--text-dim);">4-6wk warm-up; synthetic seed</td>
+            </tr>
+            <tr>
+              <td>4</td>
+              <td style="color:var(--text-mid);">LLM cost scales linearly</td>
+              <td style="color:var(--text-mid);">Alert quality</td>
+              <td style="color:var(--text-dim);">Classifier caps LLM exposure</td>
+            </tr>
+            <tr>
+              <td>5</td>
+              <td style="color:var(--text-mid);">Prompt opt. semi-manual</td>
+              <td style="color:var(--text-mid);">Safety, auditability</td>
+              <td style="color:var(--text-dim);">LLM-assisted + A/B reduces burden</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div>
+        <div style="font-family:var(--mono);font-size:9px;color:var(--text-dim);letter-spacing:2px;margin-bottom:6px;">KEY NUMBERS</div>
+        <table class="data-table" style="font-size:10.5px;">
+          <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+          <tbody>
+            <tr><td>API queries/day</td><td style="color:var(--amber);">1,920</td></tr>
+            <tr><td>Poll cadence</td><td style="color:var(--text-mid);">every 30 min / brand</td></tr>
+            <tr><td>LLM calls/day</td><td style="color:var(--amber);">~38,400</td></tr>
+            <tr><td>LLM cost</td><td style="color:var(--amber);">~$115/day</td></tr>
+            <tr><td>Worst-case latency</td><td style="color:var(--text-mid);">~37 minutes</td></tr>
+            <tr><td>CTR baseline → target</td><td style="color:var(--green);">12% → 18% (8 wks)</td></tr>
+            <tr><td>Code demo CTR</td><td style="color:var(--green);">68.4% → 89.5%</td></tr>
+            <tr><td>Embedding</td><td style="color:var(--text-mid);">384-dim (MiniLM-L6)</td></tr>
+            <tr><td>Classifier features</td><td style="color:var(--text-mid);">12</td></tr>
+            <tr><td>Max alerts/brand/day</td><td style="color:var(--text-mid);">10</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card" style="margin-top:0.8rem;border-left:3px solid var(--amber);padding:0.8rem 1.1rem;">
+      <div style="font-family:var(--serif);font-style:italic;font-size:0.9rem;color:var(--text-mid);line-height:1.6;">"The design is intentionally boring in infrastructure — Postgres, S3, Python, nothing exotic. All the interesting work is in the three feedback loops. They operate at different timescales so they don't interfere. The system should be meaningfully better at week 8 than week 1, and the code demonstrates the mechanism works."</div>
+    </div>
+  </div>
+</section>
+
+</div><!-- /deck -->
+
+<script>
+// ── State ──
+const TOTAL = 12;
+let current = 0;
+let scrollMode = false;
+let notesOpen = false;
+let ctrAnimated = false;
+
+const notes = [];
+document.querySelectorAll('.slide').forEach(s => {
+  notes.push(s.dataset.notes || '');
+});
+
+// ── Dot nav ──
+const dotNav = document.getElementById('dot-nav');
+for (let i = 0; i < TOTAL; i++) {
+  const d = document.createElement('div');
+  d.className = 'dot' + (i === 0 ? ' active' : '');
+  d.onclick = () => goTo(i);
+  dotNav.appendChild(d);
+}
+
+function updateDots() {
+  document.querySelectorAll('.dot').forEach((d,i) => d.classList.toggle('active', i===current));
+}
+
+function updateCounter() {
+  document.getElementById('slide-counter').textContent = (current+1) + ' / ' + TOTAL;
+}
+
+function updateNotes() {
+  document.getElementById('notes-text').textContent = notes[current] || '';
+}
+
+// ── Navigation ──
+function goTo(idx) {
+  if (scrollMode) return;
+  if (idx < 0 || idx >= TOTAL) return;
+  const slides = document.querySelectorAll('.slide');
+  slides[current].classList.remove('active');
+  slides[current].classList.add('exit-left');
+  setTimeout(() => slides[current].classList.remove('exit-left'), 450);
+  current = idx;
+  slides[current].classList.add('active');
+  updateDots();
+  updateCounter();
+  updateNotes();
+  // Trigger CTR animation on slide 10 (index 9)
+  if (current === 9 && !ctrAnimated) {
+    ctrAnimated = true;
+    setTimeout(animateCtr, 300);
+  }
+}
+
+function next() { goTo(current + 1); }
+function prev() { goTo(current - 1); }
+
+// ── Scroll mode ──
+function toggleScroll() {
+  scrollMode = !scrollMode;
+  document.body.classList.toggle('scroll-mode', scrollMode);
+  const btn = document.getElementById('ctrl-scroll');
+  btn.classList.toggle('active', scrollMode);
+  btn.textContent = scrollMode ? '[S] FULLSCREEN' : '[S] SCROLL';
+  if (scrollMode) {
+    document.querySelectorAll('.slide').forEach(s => {
+      s.classList.remove('active','exit-left');
+    });
+    dotNav.style.display = 'none';
+  } else {
+    document.querySelectorAll('.slide').forEach((s,i) => {
+      s.classList.toggle('active', i === current);
+    });
+    dotNav.style.display = 'flex';
+  }
+}
+
+// ── Notes ──
+function toggleNotes() {
+  notesOpen = !notesOpen;
+  document.body.classList.toggle('notes-open', notesOpen);
+  document.getElementById('notes-panel').classList.toggle('visible', notesOpen);
+  document.getElementById('ctrl-notes').classList.toggle('active', notesOpen);
+  updateNotes();
+}
+
+// ── Keyboard ──
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); next(); }
+  else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); prev(); }
+  else if (e.key === 's' || e.key === 'S') toggleScroll();
+  else if (e.key === 'n' || e.key === 'N') toggleNotes();
+});
+
+// ── CTR counter animation ──
+function animateCtr() {
+  const el = document.getElementById('ctr-after');
+  if (!el) return;
+  const start = 68.4, end = 89.5, duration = 1800;
+  const startTime = performance.now();
+  function step(now) {
+    const elapsed = now - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    const ease = 1 - Math.pow(1 - progress, 3);
+    const val = start + (end - start) * ease;
+    el.textContent = val.toFixed(1) + '%';
+    if (progress < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+// ── Architecture detail panel ──
+const DETAILS = {
+  api: ['Amazon API Gateway — Query Builder', 'Builds boolean queries from DynamoDB term weights, polls Social Listening API every 30 min/brand. Handles auth, rate limiting, and query serialization.'],
+  ingest: ['AWS Lambda — Ingestion Worker', 'Dedup by post_id (Redis bloom filter), stores raw JSONL to S3 by brand/date, emits post_ids to SageMaker via SQS.'],
+  embed: ['Amazon SageMaker — Embedder + Clusterer', 'all-MiniLM-L6-v2 384-dim embeddings, HDBSCAN clustering (min_cluster_size=3), stores vectors to OpenSearch + pgvector.'],
+  llm: ['Amazon Bedrock — LLM Scorer', 'Claude Haiku, final relevance gate + explanation generation, top 20 posts/brand/cycle. JSON output: {relevance, off_limits, why_relevant}.'],
+  alert: ['AWS Lambda — Alert Engine', 'Composite score (0.35 relevance + 0.35 velocity + 0.20 cluster + 0.10 novelty), max 10/brand/day, WebSocket push via API Gateway.'],
+  dash: ['AWS Amplify — Brand Dashboard', 'React SPA, captures click / dismiss / content_brief / share actions with dwell_time_ms. All events stream to RDS feedback store.'],
+  feedback: ['Amazon RDS — Feedback Event Store', 'Append-only event log, 90-day retention, primary input for all three learning loops. Indexed by brand_id + created_at.'],
+  loop: ['AWS Step Functions — Learning Loop', '3 separate state machines: Query Expansion (weekly), Threshold Calibration (bi-weekly), Prompt Optimization (monthly). Each reads from RDS, writes back results.'],
+  terms: ['Amazon DynamoDB — Query Term Weights', 'Per-brand term weights with version history, <5ms reads, updated by Step Functions weekly. Hash key: brand_id, range key: term.'],
+};
+
+function showDetail(key) {
+  const d = DETAILS[key];
+  if (!d) return;
+  document.getElementById('detail-title').textContent = d[0];
+  document.getElementById('detail-body').textContent = d[1];
+  document.getElementById('detail-panel').classList.add('visible');
+}
+function closeDetail() {
+  document.getElementById('detail-panel').classList.remove('visible');
+}
+
+// ── Init ──
+updateCounter();
+updateNotes();
+</script>
+</body>
+</html>
