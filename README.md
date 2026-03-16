@@ -20,7 +20,7 @@ Two tests ship in this container:
 From the repo root:
 
 ```bash
-docker build -t oa-infra-tests ./infra
+docker build -t oa-infra-tests .
 ```
 
 Expected output (last few lines):
